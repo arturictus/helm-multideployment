@@ -1,0 +1,453 @@
+---
+# Source: rails-app/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: rails-app
+  namespace: rails-app
+  labels:
+    app: rails-app
+    chart: rails-app-0.1.1
+    release: RELEASE-NAME
+    heritage: Tiller
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app: rails-app
+    release: RELEASE-NAME
+
+---
+# Source: rails-app/templates/deployments.yaml
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rails-app-sidekiq
+  namespace: rails-app
+
+  labels:
+    app: rails-app-sidekiq
+    name: rails-app-sidekiq
+    chart: "rails-app-0.1.1"
+    release: RELEASE-NAME
+    heritage: Tiller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rails-app-sidekiq
+      release: RELEASE-NAME
+  template:
+    metadata:
+      labels:
+        app: rails-app-sidekiq
+        release: RELEASE-NAME
+    spec:
+      containers:
+        - name: rails-app-sidekiq
+          image: "gcr.io/janus-156310/rails-app:99007497e4d7e5d61a3a891d4d8707b5de7903ce"
+          imagePullPolicy: IfNotPresent
+          command:
+            - bundle
+            - exec
+            - sidekiq
+            
+          env:
+            - name: RAILS_ENV
+              value: production
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: cloudsql-db-credentials
+            - name: DATABASE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: username
+                  name: cloudsql-db-credentials
+            
+
+          resources:
+            limits:
+              cpu: 100m
+              memory: 1G
+            requests:
+              cpu: 100m
+              memory: 1G
+            
+
+        - command:
+          - /cloud_sql_proxy
+          - --dir=/cloudsql
+          - -instances=project:europe-west1:databse=tcp:5432
+          - -credential_file=/secrets/cloudsql/credentials.json
+          image: gcr.io/cloudsql-docker/gce-proxy:1.09
+          name: cloudsql-proxy
+          volumeMounts:
+          - mountPath: /secrets/cloudsql
+            name: cloudsql-instance-credentials
+            readOnly: true
+          - mountPath: /etc/ssl/certs
+            name: ssl-certs
+          - mountPath: /cloudsql
+            name: cloudsql
+        
+
+
+
+      volumes:
+        - name: cloudsql-instance-credentials
+          secret:
+            secretName: cloudsql-instance-credentials
+        - hostPath:
+            path: /etc/ssl/certs
+          name: ssl-certs
+        - emptyDir: null
+          name: cloudsql
+        
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rails-app
+  namespace: rails-app
+
+  labels:
+    app: rails-app
+    name: rails-app
+    chart: "rails-app-0.1.1"
+    release: RELEASE-NAME
+    heritage: Tiller
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: rails-app
+      release: RELEASE-NAME
+  template:
+    metadata:
+      labels:
+        app: rails-app
+        release: RELEASE-NAME
+    spec:
+      containers:
+        - name: rails-app
+          image: "gcr.io/janus-156310/rails-app:99007497e4d7e5d61a3a891d4d8707b5de7903ce"
+          imagePullPolicy: IfNotPresent
+          command:
+            /sbin/my_init
+            
+          env:
+            - name: RAILS_ENV
+              value: production
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: cloudsql-db-credentials
+            - name: DATABASE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: username
+                  name: cloudsql-db-credentials
+            
+          ports:
+            - containerPort: 80
+              name: http
+              protocol: TCP
+            
+          livenessProbe:
+            httpGet:
+              path: /_health
+              port: 80
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+            
+          readinessProbe:
+            httpGet:
+              path: /_health
+              port: 80
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+            
+
+          resources:
+            limits:
+              cpu: 100m
+              memory: 1G
+            requests:
+              cpu: 100m
+              memory: 1G
+            
+
+        - command:
+          - /cloud_sql_proxy
+          - --dir=/cloudsql
+          - -instances=project:europe-west1:databse=tcp:5432
+          - -credential_file=/secrets/cloudsql/credentials.json
+          image: gcr.io/cloudsql-docker/gce-proxy:1.09
+          name: cloudsql-proxy
+          volumeMounts:
+          - mountPath: /secrets/cloudsql
+            name: cloudsql-instance-credentials
+            readOnly: true
+          - mountPath: /etc/ssl/certs
+            name: ssl-certs
+          - mountPath: /cloudsql
+            name: cloudsql
+        
+
+
+
+      volumes:
+        - name: cloudsql-instance-credentials
+          secret:
+            secretName: cloudsql-instance-credentials
+        - hostPath:
+            path: /etc/ssl/certs
+          name: ssl-certs
+        - emptyDir: null
+          name: cloudsql
+        
+
+---
+# Source: rails-app/templates/jobs.yaml
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rails-app-migration
+  namespace: rails-app
+
+  annotations:
+    helm.sh/hook: post-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded
+    
+  labels:
+    app: rails-app-migration
+    name: rails-app-migration
+    chart: "rails-app-0.1.1"
+    release: RELEASE-NAME
+    heritage: Tiller
+spec:
+  selector:
+    matchLabels:
+      app: rails-app-migration
+      release: RELEASE-NAME
+  template:
+    metadata:
+      labels:
+        app: rails-app-migration
+        release: RELEASE-NAME
+    spec:
+      activeDeadlineSeconds: 1200
+      restartPolicy: Never
+      containers:
+        - name: rails-app-migration
+          image: "gcr.io/janus-156310/rails-app:99007497e4d7e5d61a3a891d4d8707b5de7903ce"
+          imagePullPolicy: IfNotPresent
+          command:
+            - bundle
+            - exec
+            - rake
+            - db:migrate
+            
+          env:
+            - name: RAILS_ENV
+              value: production
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: cloudsql-db-credentials
+            - name: DATABASE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: username
+                  name: cloudsql-db-credentials
+            
+
+          resources:
+            limits:
+              cpu: 100m
+              memory: 1G
+            requests:
+              cpu: 100m
+              memory: 1G
+            
+
+        - command:
+          - /cloud_sql_proxy
+          - --dir=/cloudsql
+          - -instances=project:europe-west1:databse=tcp:5432
+          - -credential_file=/secrets/cloudsql/credentials.json
+          image: gcr.io/cloudsql-docker/gce-proxy:1.09
+          name: cloudsql-proxy
+          volumeMounts:
+          - mountPath: /secrets/cloudsql
+            name: cloudsql-instance-credentials
+            readOnly: true
+          - mountPath: /etc/ssl/certs
+            name: ssl-certs
+          - mountPath: /cloudsql
+            name: cloudsql
+        
+
+
+
+      volumes:
+        - name: cloudsql-instance-credentials
+          secret:
+            secretName: cloudsql-instance-credentials
+        - hostPath:
+            path: /etc/ssl/certs
+          name: ssl-certs
+        - emptyDir: null
+          name: cloudsql
+        
+
+---
+# Source: rails-app/templates/cronjobs.yaml
+
+---
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: rails-app-backup
+  namespace: rails-app
+  labels:
+    app: rails-app-backup
+    name: rails-app-backup
+    chart: "rails-app-0.1.1"
+    release: RELEASE-NAME
+    heritage: Tiller
+spec:
+  selector:
+    matchLabels:
+      app: rails-app-backup
+      release: RELEASE-NAME
+  schedule: "14 8,20 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    metadata:
+      labels:
+        app: rails-app-backup
+        release: RELEASE-NAME
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: rails-app-backup
+              image: "gcr.io/janus-156310/rails-app:99007497e4d7e5d61a3a891d4d8707b5de7903ce"
+              imagePullPolicy: IfNotPresent
+              command:
+                - backup
+                
+              env:
+                - name: RAILS_ENV
+                  value: production
+                - name: DATABASE_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      key: password
+                      name: cloudsql-db-credentials
+                - name: DATABASE_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      key: username
+                      name: cloudsql-db-credentials
+                
+    
+              resources:
+                limits:
+                  cpu: 100m
+                  memory: 1G
+                requests:
+                  cpu: 100m
+                  memory: 1G
+                
+    
+            - command:
+              - /cloud_sql_proxy
+              - --dir=/cloudsql
+              - -instances=project:europe-west1:databse=tcp:5432
+              - -credential_file=/secrets/cloudsql/credentials.json
+              image: gcr.io/cloudsql-docker/gce-proxy:1.09
+              name: cloudsql-proxy
+              volumeMounts:
+              - mountPath: /secrets/cloudsql
+                name: cloudsql-instance-credentials
+                readOnly: true
+              - mountPath: /etc/ssl/certs
+                name: ssl-certs
+              - mountPath: /cloudsql
+                name: cloudsql
+            
+    
+    
+    
+          volumes:
+            - name: cloudsql-instance-credentials
+              secret:
+                secretName: cloudsql-instance-credentials
+            - hostPath:
+                path: /etc/ssl/certs
+              name: ssl-certs
+            - emptyDir: null
+              name: cloudsql
+            
+
+---
+# Source: rails-app/templates/ingress.yaml
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: rails-app
+  namespace: rails-app
+  labels:
+    app: rails-app
+    chart: rails-app-0.1.1
+    release: RELEASE-NAME
+    heritage: Tiller
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    kubernetes.io/tls-acme: "true"
+    
+spec:
+  tls:
+    - hosts:
+        - rails-app.domain.io
+        - rails-app.domain.com
+        - adansonia.domain.io
+      secretName: rails-app-meetsam-tls
+  rules:
+    - host: rails-app.domain.io
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: rails-app
+              servicePort: 80
+    - host: rails-app.domain.com
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: rails-app
+              servicePort: 80
+    - host: adansonia.domain.io
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: rails-app
+              servicePort: 80
+

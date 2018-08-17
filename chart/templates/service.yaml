@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.deployments.web.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Values.deployments.web.name }}
+    chart: {{ template "rails-app.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app: {{ .Values.deployments.web.name }}
+    release: {{ .Release.Name }}

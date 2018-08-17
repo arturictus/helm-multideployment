@@ -1,0 +1,81 @@
+{{- range .Values.deployments }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}
+  namespace: {{ $.Values.namespace }}
+{{ if .annotations }}
+  annotations:
+{{ toYaml .annotations | indent 4 }}{{- end }}
+  labels:
+    app: {{ .name }}
+    name: {{ .name }}
+    chart: "{{ $.Chart.Name }}-{{ $.Chart.Version | replace "+" "_" }}"
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+spec:
+  replicas: {{ .replication }}
+  selector:
+    matchLabels:
+      app: {{ .name }}
+      release: {{ $.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .name }}
+        release: {{ $.Release.Name }}
+    spec:
+      containers:
+        - name: {{ .name }}
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+{{- with .command }}
+          command:
+{{ toYaml . | indent 12 }}{{- end }}
+          env:
+{{ toYaml $.Values.environment | indent 12 }}
+{{- with .ports }}
+          ports:
+{{ toYaml . | indent 12 }}{{- end }}
+{{- with .liveness }}
+          livenessProbe:
+{{ toYaml . | indent 12 }}{{- end }}
+{{- with .readiness }}
+          readinessProbe:
+{{ toYaml . | indent 12 }}{{- end }}
+{{- with $.Values.volumeMounts }}
+          volumeMounts:
+{{ toYaml . | indent 12 }}{{- end }}
+{{ if .resources }}
+          resources:
+{{ toYaml .resources | indent 12 }}
+{{ else if $.Values.resources }}
+          resources:
+{{ toYaml $.Values.resources | indent 12 }}
+{{ end }}
+{{ toYaml $.Values.sidecars | indent 8 }}
+{{ if .nodeSelector }}
+      nodeSelector:
+{{ toYaml .nodeSelector | indent 8 }}
+{{ else if $.Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml $.Values.nodeSelector | indent 8 }}
+{{ end }}
+{{ if .affinity }}
+      affinity:
+{{ toYaml .affinity | indent 8 }}
+{{ else if $.Values.affinity }}
+      affinity:
+{{ toYaml $.Values.affinity | indent 8 }}
+{{ end }}
+{{ if .tolerations }}
+      tolerations:
+{{ toYaml .tolerations | indent 8 }}
+{{ else if $.Values.tolerations }}
+      tolerations:
+{{ toYaml $.Values.tolerations | indent 8 }}
+{{ end }}
+      volumes:
+{{ toYaml $.Values.volumes | indent 8 }}
+{{- end }}

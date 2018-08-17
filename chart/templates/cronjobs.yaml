@@ -1,0 +1,73 @@
+{{- range .Values.cronjobs }}
+---
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ .name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app: {{ .name }}
+    name: {{ .name }}
+    chart: "{{ $.Chart.Name }}-{{ $.Chart.Version | replace "+" "_" }}"
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .name }}
+      release: {{ $.Release.Name }}
+  schedule: {{ .schedule | quote }}
+  concurrencyPolicy: {{ .concurrencyPolicy }}
+  jobTemplate:
+    metadata:
+      labels:
+        app: {{ .name }}
+        release: {{ $.Release.Name }}
+    spec:
+      template:
+        spec:
+          restartPolicy: {{ .restartPolicy }}
+          containers:
+            - name: {{ .name }}
+              image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+              imagePullPolicy: {{ $.Values.image.pullPolicy }}
+    {{- with .command }}
+              command:
+{{ toYaml . | indent 16 }}{{- end }}
+              env:
+{{ toYaml $.Values.environment | indent 16 }}
+    {{- with $.Values.volumeMounts }}
+              volumeMounts:
+{{ toYaml . | indent 16 }}{{- end }}
+    {{ if .resources }}
+              resources:
+{{ toYaml .resources | indent 16 }}
+    {{ else if $.Values.resources }}
+              resources:
+{{ toYaml $.Values.resources | indent 16 }}
+    {{ end }}
+{{ toYaml $.Values.sidecars | indent 12 }}
+    {{ if .nodeSelector }}
+          nodeSelector:
+{{ toYaml .nodeSelector | indent 12 }}
+    {{ else if $.Values.nodeSelector }}
+          nodeSelector:
+{{ toYaml $.Values.nodeSelector | indent 12 }}
+    {{ end }}
+    {{ if .affinity }}
+          affinity:
+{{ toYaml .affinity | indent 12 }}
+    {{ else if $.Values.affinity }}
+          affinity:
+{{ toYaml $.Values.affinity | indent 12 }}
+    {{ end }}
+    {{ if .tolerations }}
+          tolerations:
+{{ toYaml .tolerations | indent 12 }}
+    {{ else if $.Values.tolerations }}
+          tolerations:
+{{ toYaml $.Values.tolerations | indent 12 }}
+    {{ end }}
+          volumes:
+{{ toYaml $.Values.volumes | indent 12 }}
+    {{- end }}
