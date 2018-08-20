@@ -1,0 +1,21 @@
+#!/bin//bash
+
+set -e # exit on error
+
+CHART_NAME=$1
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
+
+echo $CHART_NAME
+
+if [ -n "$CHART_NAME" ]
+then echo ""
+else
+  echo "Please provide chart name"
+  echo "
+    USAGE:
+    $ bin/helm-template rails_app
+  "
+  exit 1
+fi
+
+echo $("$DIR" | sed -e 's/bin/chart/')
