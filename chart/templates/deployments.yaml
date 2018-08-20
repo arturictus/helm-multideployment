@@ -33,8 +33,13 @@ spec:
 {{- with .command }}
           command:
 {{ toYaml . | indent 12 }}{{- end }}
+{{ if .env }}
           env:
-{{ toYaml $.Values.environment | indent 12 }}
+{{ toYaml .env | indent 12 }}
+{{ else if $.Values.env }}
+          env:
+{{ toYaml $.Values.env | indent 12 }}
+{{ end }}
 {{- with .ports }}
           ports:
 {{ toYaml . | indent 12 }}{{- end }}
@@ -54,7 +59,13 @@ spec:
           resources:
 {{ toYaml $.Values.resources | indent 12 }}
 {{ end }}
+{{ if .includes }}
+{{ toYaml .includes | indent 10 }}
+{{ end }}
+
+{{ if $.Values.sidecars }}
 {{ toYaml $.Values.sidecars | indent 8 }}
+{{ end }}
 {{ if .nodeSelector }}
       nodeSelector:
 {{ toYaml .nodeSelector | indent 8 }}
